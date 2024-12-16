@@ -34,6 +34,8 @@ editor_options:
 ## Required packages {style="color: #285F42"}
 
 ```{r}
+#| echo: true
+#| results: false
 library(tidytuesdayR)
 library(tidyverse)
 library(DT)
