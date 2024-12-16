@@ -209,7 +209,7 @@ ggplot(clean_st_su_me , aes( x= reorder(product_name,mean_sugar_g), y= mean_suga
 
 [The current average: The average of the sugar content in the current graph. The global average: The average of the sugar content in the original dataset.]{style="color: #285F42;"}
 
-### Classification tree to decide the relationship between the milktype and size
+### Classification tree to decide the relationship between size and whether contains milk or not. 
 
 ```{r}
 tree_model <- rpart(is_milk~ size,  data= starbucks, method= "class")
