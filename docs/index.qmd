@@ -278,7 +278,7 @@ imputed_data_only <- starbucks_mice[rowSums(imputed_rows) > 0, ]
 datatable(imputed_data_only)
 ```
 
-The imputation is not accurate, the size of the drink is too large. {style="color: #285F42"}
+[The imputation is not accurate, the size of the drink is too large.] {style="color: #285F42"}
 
 ### let's use another Machine Learning technique to predict the serving size in mililitre {style="color: #285F42"}
 
@@ -329,7 +329,15 @@ starbucks_plot_after_pred <- starbucks_pred %>%
   summarise(serv_size_ml_mean = mean(serv_size_m_l, na.rm = TRUE))
 
 ggplot(starbucks_plot_after_pred, aes(x= size, y=serv_size_ml_mean))+
-         geom_bar(stat= "identity")
+         geom_bar(stat= "identity", fill = "#285F42")+
+  theme_classic()+
+  labs(x= "Size of the cup",
+       y= "Serving Size in mililitre (mean)",
+       title= "After prediction")+
+  theme(
+    axis.text.y = element_text(color= "#285F42"),
+    axis.text.x = element_text(color= "#285F42"),
+    axis.title = element_text(color= "#285F42"))
 
 ```
 
