@@ -1,0 +1,472 @@
+---
+title: "Starbucks TidyTuesday Data Science Project"
+format: html
+code-fold: true
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Please read the project on white background.
+
+# Starbucks TidyTuesday Data Science Project {style="color: #285F42"}
+
+![](coffee_picture.png){width="73"}
+
+[Picture was generated using OpenAi's DALL-E]{style="color: #285F42;"}
+
+# Disclaimer {style="color: #285F42"}
+
+[This is just a Data Analytics/Science project, purely interested in the current data. I have no intention to influence in any way Starbucks's business.]{style="color: #285F42;"}
+
+## Instructions {style="color: #285F42"}
+
+[If you are interested in the code please click on the "Code" at each section, and that will reveal the code used in the project.]{style="color: #285F42;"}
+
+## The data {style="color: #285F42"}
+
+[The data comes from the TidyTuesday project on GitHub (https://github.com/rfordatascience/tidytuesday/blob/main/data/2021/2021-12-21/readme.md#starbuckscsv).]{style="color: #285F42;"}
+
+## Environment {style="color: #285F42"}
+
+[For the current project I used R ( version 4.4.2) on RStudio (version 2024.9.1.394).]{style="color: #285F42;"}
+
+## Required packages {style="color: #285F42"}
+
+```{r}
+library(tidytuesdayR)
+library(tidyverse)
+library(DT)
+library(psych)
+library(car)
+library(rpart)
+library(rpart.plot)
+library(mice)
+library(randomForest)
+library(caret)
+```
+
+## The data {style="color: #285F42"}
+
+```{r}
+data <- tt_load("2021-12-21")
+starbucks <- as.data.frame(data$starbucks)
+str(starbucks)
+#View(starbucks) #<- After get a glimpse of the ends of the dataset, I accidentaly noticed that at the trans_fat_g there is a case, where 02 is the value. I fixed it: 
+starbucks$trans_fat_g<- gsub("^02$", "0.2", starbucks$trans_fat_g)
+
+starbucks$milk <- as.factor(starbucks$milk)
+starbucks$fiber_g <- as.numeric(starbucks$fiber_g)
+starbucks$product_name <- as.factor(starbucks$product_name)
+starbucks$trans_fat_g <- as.numeric(starbucks$trans_fat_g)
+
+#Are there any missing value? 
+colSums(is.na(starbucks)) #<— no 
+
+#Adding an is_milk variable, to decide easier is it a milk beverage or not. 
+starbucks<- starbucks %>%
+  mutate(is_milk= ifelse(milk==0, 0, 1))
+
+#Changing to the actual name of the milk
+starbucks<- starbucks %>%
+  mutate(milk_names = case_when(
+                                milk == 0 ~ "none",
+                                milk == 1 ~ "nonfat",
+                                milk == 2 ~ "2%",
+                                milk == 3 ~ "soy",
+                                milk == 4 ~ "coconut",
+                                milk == 5 ~ "whole"))
+#Make sure in the output it will appears in the correct order
+starbucks$milk_names <- factor(starbucks$milk_names, levels= c("none","nonfat","2%", "soy", "coconut", "whole"))
+```
+
+## Inspecting the elements of the type of the drink ( milk/ without milk) {style="color: #285F42"}
+
+```{r}
+starbucks_milk <- starbucks %>%
+  select(product_name, 
+         milk,
+         whip)
+
+datatable(starbucks_milk)
+```
+
+[In the datatable above the same Product is present. It's because many Product was ordered in more form (e.g. venti, tall). Due to that reason, I filtered]{style="color: #285F42;"}
+
+## Inspecting the elements of the type of the drink( milk/ without milk) *- filtered* {style="color: #285F42"}
+
+```{r}
+starbucks_milk_2 <- starbucks %>%
+  select(product_name, 
+         is_milk) %>%
+  distinct() #<-to put every variable to the table at once
+
+
+datatable(starbucks_milk_2)
+```
+
+## What kind of milk? {style="color: #285F42"}
+
+```{r }
+starbucks_milk_3 <- starbucks %>%
+  select(product_name, 
+         milk_names) %>%
+  distinct()
+
+
+datatable(starbucks_milk_3)
+```
+
+### Did you know how large are the sizes of the coffees? {style="color: #285F42"}
+
+#### Don't worry me neither, here is a table for that! {style="color: #285F42"}
+
+```{r }
+size <- starbucks %>%
+  select(size,
+         serv_size_m_l) %>%
+  distinct()
+
+datatable(size)
+```
+
+[It's interesting!! There are coffee-s with 0 ml. They are very small, but! We can still write down a ml, even if it's very small (e.g. 0.00005). How could we solve this mystery? To be continued...]{style="color: #285F42;"}
+
+### Sugar-content {style="color: #285F42"}
+
+[Many people thinks Starbucks sells mostly sugary drinks. Which is the most sugary, and less sugary drink?]{style="color: #285F42;"}
+
+```{r sugary_1}
+#Mean sugar in the drinks
+mean(starbucks$sugar_g)
+```
+
+### But how is it in each drink? {style="color: #285F42"}
+
+```{r sugary}
+starbucks_sugar <- starbucks %>%
+  select(product_name, sugar_g)
+
+datatable(starbucks_sugar)
+
+max_sug <- max(starbucks_sugar$sugar_g)
+product_with_max_sugar <- starbucks_sugar %>%
+  filter(sugar_g == max_sug)
+print(product_with_max_sugar)
+
+#computing the mean sugar_g per each product_name. It is important, because there are the same product names across the data with the same sugar_g. This is because there are more kind of drinks under the same name (e.g. different sizes)
+starbucks_sugar_name <- starbucks %>%
+  select(product_name, sugar_g) %>%
+  mutate(sugar_g= ifelse(sugar_g ==0, NA, sugar_g)) %>%
+  distinct()
+
+
+datatable(starbucks_sugar_name)
+
+# Starbucks suhar mean
+starbucks_sugar_mean <- starbucks %>%
+  select(product_name, sugar_g) %>%
+  mutate(sugar_g = ifelse(sugar_g == 0, NA, sugar_g)) %>%
+  group_by(product_name) %>%
+  summarise(mean_sugar_g = mean(sugar_g, na.rm = TRUE)) %>%  
+  distinct()
+
+# Remove rows with NA mean_sugar_g
+clean_st_su_me <- na.omit(starbucks_sugar_mean)
+
+#for plotting
+act_Mean <- mean(clean_st_su_me$mean_sugar_g)
+glb_Mean <- mean(starbucks$sugar_g)
+  
+
+```
+
+```{r fig.width=10, fig.height=12}
+ggplot(clean_st_su_me , aes( x= reorder(product_name,mean_sugar_g), y= mean_sugar_g))+
+  geom_segment(aes(xend = product_name, yend = 0), 
+               color = "#285F42", size = 1.5)+
+  geom_hline(yintercept = act_Mean, linetype = "dotted", color = "grey40", linewidth = 1)+
+  geom_hline(yintercept = glb_Mean, linetype = "dashed", color = "grey40", linewidth = 1)+
+   geom_point(aes(x = product_name, y = mean_sugar_g), 
+             shape = 21, size = 4, color = "#285F42", fill = "white") +
+    geom_text(aes(label = sprintf("%.f", mean_sugar_g)), vjust = 0.5, hjust = 0.5, size = 3, color = "#285F42")+
+  annotate("text", x = 9, y = act_Mean - 11, label = "The\ncurrent\naverage", 
+           size = 4, color = "grey40", angle = 0, hjust = 0) +
+  annotate("text", x = 9, y = glb_Mean + 1, label = "The\nglobal\naverage", 
+           size = 4, color = "grey40", angle = 0, hjust = 0) +
+  coord_flip()+
+  scale_y_continuous(expand = c(0, 0))+
+  theme_classic()+
+  labs(x= "Name of the bewerage",
+       y= "Average sugar content")+
+  theme(
+    axis.text.y = element_text(angle = 0, hjust = 1, color= "#285F42"),
+    axis.text.x = element_text(color= "#285F42"),
+    axis.title = element_text(color= "#285F42")
+  )
+```
+
+[The current average: The average of the sugar content in the current graph. The global average: The average of the sugar content in the original dataset.]{style="color: #285F42;"}
+
+### Classification tree to decide the relationship between the milktype and size
+
+```{r}
+tree_model <- rpart(is_milk~ size,  data= starbucks, method= "class")
+
+rpart.plot(tree_model)
+```
+
+[Indicating if the drink is 1 scoop, 1 shot, or trenta than it's 98% that it has no milk in it.]{style="color: #285F42;"}
+
+# Calculating the ml of the Variables where it's 0. {style="color: #285F42"}
+
+[For that I tried more tequniques.]{style="color: #285F42;"}
+
+## First Approach {style="color: #285F42"}
+
+#### [First create dataset where the size is missing.]{style="color: #285F42;"}
+
+### [Attempt to use Multivariate Imputation by Chained Equations]{style="color: #285F42;"}
+
+```{r}
+starbucks_plot_before_imputing <- starbucks %>%
+  group_by(size) %>%
+  summarise(serv_size_ml_mean = mean(serv_size_m_l, na.rm = TRUE))
+
+
+ggplot(starbucks_plot_before_imputing, aes(x= size, y=serv_size_ml_mean))+
+         geom_bar(stat= "identity")
+
+
+
+starbucks_missing <- starbucks %>%
+  mutate(serv_size_m_l= ifelse(serv_size_m_l== 0, NA, serv_size_m_l))
+
+set.seed(123)
+imp <- mice(starbucks_missing, method = "pmm", m = 5, seed = 123)
+
+starbucks_mice <- complete(imp, action=1)
+
+starbucks_plot_after_imputing <- starbucks_mice %>%
+  group_by(size) %>%
+  summarise(serv_size_ml_mean = mean(serv_size_m_l, na.rm = TRUE))
+
+
+ggplot(starbucks_plot_after_imputing, aes(x= size, y=serv_size_ml_mean))+
+         geom_bar(stat= "identity")
+
+#extract rows where  imputed data were
+imputed_rows <- is.na(starbucks_missing) 
+imputed_data_only <- starbucks_mice[rowSums(imputed_rows) > 0, ]
+
+datatable(imputed_data_only)
+```
+
+The imputation is not accurate, the size of the drink is too large. {style="color: #285F42"}
+
+### let's use another Machine Learning technique to predict the serving size in mililitre {style="color: #285F42"}
+
+```{r }
+pre_data_1 <- starbucks %>%
+  mutate(grouping = ifelse(serv_size_m_l == 0, 1,0))
+
+train_data <- pre_data_1 %>%
+  filter(grouping == 0)
+
+test_data <- pre_data_1 %>% 
+  filter(grouping == 1) 
+
+features <- c("size", "milk", "whip","calories", "total_fat_g", "trans_fat_g", "cholesterol_mg", "sodium_mg", "total_carbs_g", "fiber_g", "sugar_g", "caffeine_mg", "is_milk")
+
+model <- randomForest(serv_size_m_l ~ ., data = train_data[, c("serv_size_m_l", features)])
+
+test_data$serv_size_m_l <- predict(model, test_data[, features])
+
+#It's also a very large amount. We can try the next step- 
+datatable(test_data)
+
+#First remove highly cortrelated predictors
+variable_list <-c("whip","serv_size_m_l","calories", "total_fat_g","saturated_fat_g", "trans_fat_g", "cholesterol_mg", "sodium_mg", "total_carbs_g", "fiber_g", "sugar_g", "caffeine_mg", "is_milk")
+cor_matrix <- cor(starbucks[, variable_list])
+
+highly_correlated <- findCorrelation(cor_matrix, cutoff = 0.9)
+
+print(variable_list[highly_correlated])
+
+model_lm <- lm(serv_size_m_l ~whip+calories+saturated_fat_g+trans_fat_g+
+                 sodium_mg+fiber_g+sugar_g+ caffeine_mg+ milk_names, data= starbucks)
+alias(model_lm)
+vif(model_lm)
+#Remove variables above 5 VIF value
+model_lm_new <- lm(serv_size_m_l ~whip+saturated_fat_g+trans_fat_g+
+                 sodium_mg+fiber_g+ caffeine_mg+ milk_names, data= starbucks)
+
+starbucks_pred <- starbucks %>%
+  mutate(predicted_ml = predict(model_lm_new, newdata = .),
+         serv_size_m_l = ifelse(serv_size_m_l == 0, predicted_ml, serv_size_m_l)) %>%
+  select(-predicted_ml)
+
+datatable(starbucks_pred)
+
+starbucks_plot_after_pred <- starbucks_pred %>%
+  group_by(size) %>%
+  summarise(serv_size_ml_mean = mean(serv_size_m_l, na.rm = TRUE))
+
+ggplot(starbucks_plot_after_pred, aes(x= size, y=serv_size_ml_mean))+
+         geom_bar(stat= "identity")
+
+```
+
+## Conclusion for the aforementioned Machine Learning predictions. {style="color: #285F42"}
+
+## Although it was a statistical success both cases, but not a practical one, because the dataset has no useful variable to predict smaller sizes. {style="color: #285F42"}
+
+## Due to the fact we do not have any data for them I used a different approach {style="color: #285F42"}
+
+#### I created a test data for Espresso {style="color: #285F42"} based on: https://www.starbucks.com/menu/drinks/hot-coffees
+
+```{r}
+required_data <- starbucks %>%
+  filter(serv_size_m_l == 0)
+
+
+datatable(required_data)
+#The nown information was copied fromt eh starbucks dataset 
+#Espresso solo
+espresso_s <- data.frame(product_name= "Espresso",
+                         size = "solo",
+                         milk = 0,
+                         whip = 0,
+                         serv_size_o_z= 0.75,
+                         calories= 5,
+                         total_fat_g= 0,
+                         saturated_fat_g = 0,
+                         trans_fat_g = 0,
+                         cholesterol_mg = 0,
+                         sodium_mg = 0, 
+                         total_carbs_g = 2,
+                         fiber_g = NA,
+                         sugar_g = 0,
+                         caffeine_mg = 75, 
+                         is_milk = 0,
+                         milk_names = "none") 
+
+#Espresso doppio
+espresso_d <- data.frame(product_name= "Espresso",
+                         size = "doppio",
+                         milk = 0,
+                         whip = 0,
+                         serv_size_o_z= 1.5,
+                         calories= 5,
+                         total_fat_g= 0,
+                         saturated_fat_g = 0,
+                         trans_fat_g = 0,
+                         cholesterol_mg = 0,
+                         sodium_mg = 0, 
+                         total_carbs_g = 2,
+                         fiber_g = NA,
+                         sugar_g = 0,
+                         caffeine_mg = 150, 
+                         is_milk = 0,
+                         milk_names = "none") 
+#Espresso triple
+espresso_t <- data.frame(product_name= "Espresso",
+                         size = "triple",
+                         milk = 0,
+                         whip = 0,
+                         serv_size_o_z= 2.25,
+                         calories= 15,
+                         total_fat_g= 0,
+                         saturated_fat_g = 0,
+                         trans_fat_g = 0,
+                         cholesterol_mg = 0,
+                         sodium_mg = 0, 
+                         total_carbs_g = 3,
+                         fiber_g = NA,
+                         sugar_g = 0,
+                         caffeine_mg = 225, 
+                         is_milk = 0,
+                         milk_names = "none") 
+
+
+espresso_q <- data.frame(product_name= "Espresso",
+                         size = "quad",
+                         milk = 0,
+                         whip = 0,
+                         serv_size_o_z= 3,
+                         calories= 20,
+                         total_fat_g= 0,
+                         saturated_fat_g = 0,
+                         trans_fat_g = 0,
+                         cholesterol_mg = 0,
+                         sodium_mg = 0, 
+                         total_carbs_g = 4,
+                         fiber_g = NA,
+                         sugar_g = 0,
+                         caffeine_mg = 300, 
+                         is_milk = 0,
+                         milk_names = "none") 
+
+
+espresso_df <- rbind(espresso_s, espresso_d, espresso_t, espresso_q)
+#First conmnvert oz to ml
+#one oz is 29,5735 ml
+espresso_df <- espresso_df %>%
+  mutate(serv_size_m_l = serv_size_o_z*29.5735) %>%
+  select(-serv_size_o_z)
+
+datatable(espresso_df)
+
+```
+
+```{r}
+starbucks_train <- starbucks %>%
+     filter(product_name != "Espresso") %>%
+     select(product_name, size, milk, whip, calories, total_fat_g, saturated_fat_g, trans_fat_g, cholesterol_mg, sodium_mg, total_carbs_g, sugar_g, caffeine_mg, is_milk, serv_size_m_l, milk_names) 
+
+espresso_df_test <- espresso_df %>%
+  select(-fiber_g)
+
+prediction_model <- lm(caffeine_mg ~  size+serv_size_m_l,  data= starbucks_train)
+summary(prediction_model)
+
+predictions <- predict(prediction_model, newdata = espresso_df_test)
+print(predictions)
+
+
+## Note the plot is a bit biased, because some coffee-s are missing
+whole_model <- rbind(starbucks_train, espresso_df_test)
+tree_model_3 <- rpart(serv_size_m_l~.-product_name ,data= whole_model, method= "anova")
+
+rpart.plot(tree_model_3)
+```
+
+## Indication {style="color: #285F42"}
+
+[Based on the size and/or Serving size millilitre we can predict caffeine content. However after we manually adding to the test dataset. This data is insufficient to predict the Serving size millilitre alone, because it can "learn", from only from the larger data. (see above)]{style="color: #285F42;"}
+
+## The end {style="color: #285F42"}
+
+[At the end of my project I want to say goodbye with a nice looking plot.]{style="color: #285F42;"}
+
+```{r}
+library(corrplot)
+starbucks_data_together <- rbind(espresso_df, starbucks)
+
+starbucks_data_corrplot_preprocessing <- starbucks_data_together%>%
+  filter(serv_size_m_l != 0)%>%
+  select(- product_name,
+         -size,
+         -milk_names,
+         - milk)
+str(starbucks_data_corrplot_preprocessing)
+
+shapiro.test(starbucks_data_corrplot_preprocessing$whip)
+starbucks_corr_matrix <- cor(starbucks_data_corrplot_preprocessing, method = "spearman", use = "complete.obs")
+
+
+
+rownames(starbucks_corr_matrix) <- c("Whip", "Calories", "Total fat grams", "Saturated fat grams", "Trans fat grams", "Cholesterol miligramms", "Sodium miligrams", "Total carbs grams", "Fiber grams", "Sugar grams", "Caffeine miligrams", "Contains milk?", "Serving size millilitre" ) 
+colnames(starbucks_corr_matrix) <- c("Whip", "Calories", "Total fat grams", "Saturated fat grams", "Trans fat grams", "Cholesterol miligramms", "Sodium miligrams", "Total carbs grams", "Fiber grams", "Sugar grams", "Caffeine miligrams", "Contains milk?", "Serving size millilitre") 
+corrplot(starbucks_corr_matrix, col = colorRampPalette(c("red", "white", "#285F42"))(200), method= "color" )
+```
