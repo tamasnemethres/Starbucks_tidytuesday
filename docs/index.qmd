@@ -235,7 +235,15 @@ starbucks_plot_before_imputing <- starbucks %>%
 
 
 ggplot(starbucks_plot_before_imputing, aes(x= size, y=serv_size_ml_mean))+
-         geom_bar(stat= "identity")
+         geom_bar(stat= "identity", fill = "#285F42")+
+  theme_classic()+
+  labs(x= "Size of the cup",
+       y= "Serving Size in mililitre (mean)",
+       title= "Before imputing")+
+  theme(
+    axis.text.y = element_text(color= "#285F42"),
+    axis.text.x = element_text(color= "#285F42"),
+    axis.title = element_text(color= "#285F42"))
 
 
 
@@ -253,7 +261,15 @@ starbucks_plot_after_imputing <- starbucks_mice %>%
 
 
 ggplot(starbucks_plot_after_imputing, aes(x= size, y=serv_size_ml_mean))+
-         geom_bar(stat= "identity")
+         geom_bar(stat= "identity", fill = "#285F42")+
+  theme_classic()+
+  labs(x= "Size of the cup",
+       y= "Serving Size in mililitre (mean)",
+       title= "After imputing")+
+  theme(
+    axis.text.y = element_text(color= "#285F42"),
+    axis.text.x = element_text(color= "#285F42"),
+    axis.title = element_text(color= "#285F42"))
 
 #extract rows where  imputed data were
 imputed_rows <- is.na(starbucks_missing) 
