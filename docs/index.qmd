@@ -33,7 +33,7 @@ editor_options:
 
 ## Required packages {style="color: #285F42"}
 
-```{r echo=FALSE, results='hide'}
+```{r message=FALSE, warning=FALSE}
 
 library(tidytuesdayR)
 library(tidyverse)
